@@ -119,6 +119,11 @@ function mtglt_tournament_box_html($post)
                 echo '</option>';
             }
             wp_reset_postdata();
+
+            // TODO: add option for date
+            // TODO: add option for location
+            // TODO: add option for format
+            // TODO: add result upload
         ?>
     </select>
     <?php
