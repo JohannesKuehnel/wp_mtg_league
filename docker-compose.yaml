@@ -1,0 +1,30 @@
+version: '3'
+
+services: 
+  mysql:
+    image: mysql
+    volumes:
+      - ./db_data:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+    ports:
+      - 8081:80
+    links:
+      - mysql:db
+  wordpress:
+    depends_on:
+      - mysql
+    image: wordpress:php7.2
+    ports:
+      - 8080:80
+    restart: always
+    environment:
+      WORDPRESS_DB_PASSWORD: password
+    volumes:
+      - ./wp-content/plugins/mtg_league_tracker:/var/www/html/wp-content/plugins/mtg_league_tracker
+      - ./wp-content/wp-uploads:/var/www/html/wp-content/wp-uploads
