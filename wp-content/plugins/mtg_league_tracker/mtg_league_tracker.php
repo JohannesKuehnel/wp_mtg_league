@@ -2,7 +2,7 @@
 /*
 Plugin Name: MTG League Tracker
 Description: A plugin to upload MTG tournament results from WER to keep track of league standings.
-Version: 0.1.0
+Version: 0.1.1
 Author: Johannes Kühnel
 Author URI: https://www.kuehnel.co.at/
 License: GPLv2 or later
@@ -23,13 +23,27 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-Copyright 2018 Johannes Kühnel
+Copyright 2019 Johannes Kühnel
+*/
+
+/*
+TODO: create result table on install - see https://codex.wordpress.org/Creating_Tables_with_Plugins
+TODO: create player table on install - see https://codex.wordpress.org/Creating_Tables_with_Plugins
+TODO: process and save results on save - see old/parse_xml.php and old/upload.php
+TODO: add delete button to meta box
 */
 
 if ( !function_exists( 'add_action' ) ) {
     echo 'Hi there!  I\'m just a plugin, not much I can do when called directly.';
     exit;
 }
+
+function mtglt_plugin_activate(){
+    if ( ! is_plugin_active( 'the-events-calendar/the-events-calendar.php' ) and current_user_can( 'activate_plugins' ) ) {
+        wp_die('Sorry, but this plugin requires The Events Calendar to be installed and active. <br><a href="' . admin_url( 'plugins.php' ) . '">&laquo; Return to Plugins</a>');
+    }
+}
+register_activation_hook( __FILE__, 'mtglt_plugin_activate' );
 
 function mtglt_options_page_html()
 {
@@ -68,94 +82,65 @@ function mtglt_options_page()
 }
 add_action('admin_menu', 'mtglt_options_page');
 
-function mtglt_league_post_type() {
-    register_post_type('mtglt_league',
-        array(
-            'labels'        => array(
-                'name'          => __('Leagues'),
-                'singular_name' => __('League')
-            ),
-            'public'        => true,
-            'has_archive'   => true,
-            'rewrite'       => array( 'slug' => 'leagues' )
-        )
-    );
+// add .xml to the list of allowed file types
+function result_file_mime_types($mime_types){
+    $mime_types['xml'] = 'text/xml';
+    return $mime_types;
 }
-add_action('init', 'mtglt_league_post_type');
+add_filter('upload_mimes', 'result_file_mime_types', 1, 1);
 
-function mtglt_tournament_post_type() {
-    register_post_type('mtglt_tournament',
-        array(
-            'labels'        => array(
-                'name'          => __('Tournaments'),
-                'singular_name' => __('Tournament')
-            ),
-            'public'        => true,
-            'has_archive'   => true,
-            'rewrite'       => array( 'slug' => 'tournaments' )
-        )
-    );
+function mtglt_add_result_box($post) {
+    add_meta_box( 'mtglt-result-file' , __( 'Result File', 'textdomain' ), 'mtglt_file_callback', ['tribe_events'], 'side', 'low' );
 }
-add_action('init', 'mtglt_tournament_post_type');
+add_action( 'add_meta_boxes', 'mtglt_add_result_box' );
 
-function mtglt_tournament_box_html($post)
-{
-    $meta_value = get_post_meta($post->ID, '_mtglt_league_meta_key', true);
-    $args = [
-        'post_type'      => 'mtglt_league',
-        'posts_per_page' => 10,
-    ];
-    $loop = new WP_Query($args);
-    
-    ?>
-    <label for="mtglt_league_field">League</label>
-    <select name="mtglt_league_field" id="mtglt_league_field" class="postbox">
-        <option value="">Select a League...</option>
-        <?php
-        while ($loop->have_posts()) {
-            $loop->the_post();
-            echo '<option value="' . get_the_ID() . '" ' . selected($meta_value, get_the_ID()) . '>';
-            the_title();
-            echo '</option>';
-        }
-        wp_reset_postdata();
-        ?>
-    </select>
-    <?php
-    // TODO: add option for date
-    // TODO: add option for location
-    // TODO: add option for format
-    // TODO: add result upload
+function mtglt_file_callback($post) {
+    wp_nonce_field( 'mtglt_nonce', 'meta_box_nonce' );
+    $fileLink = get_post_meta($post->ID, "mtglt_result_file", true);
+?>
+<label for="mtglt_result_file">Result File</label>
+<input id="mtglt_result_file" name="mtglt_result_file" type="text" value="<?= $fileLink ?>" />
+<input id="upload_button" type="button" value="Choose File" />
+<?php
 }
+
+function mtglt_add_admin_scripts($hook) {
+    if($hook !== 'post-new.php' && $hook !== 'post.php')
+    {
+        return;
+    }
+    wp_enqueue_script('media-upload');
+    wp_enqueue_script('thickbox');
+    wp_enqueue_script('MTGLT_JS_Admin', plugins_url( '/js/admin.js', __FILE__ ), array('jquery','media-upload','thickbox'), 1.3, true);
+    wp_enqueue_style('thickbox');
+}
+add_action('admin_enqueue_scripts', 'mtglt_add_admin_scripts');
 
 function mtglt_tournament_save_postdata($post_id)
 {
-    if (array_key_exists('mtglt_league_field', $_POST)) {
-        update_post_meta(
-            $post_id,
-            '_mtglt_league_meta_key',
-            $_POST['mtglt_league_field']
-        );
+    // Bail if we're doing an auto save
+    if( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
+ 
+    // if our nonce isn't there, or we can't verify it, bail
+    if( !isset( $_POST['meta_box_nonce'] ) || !wp_verify_nonce( $_POST['meta_box_nonce'], 'mtglt_nonce' ) ) return;
+ 
+    // if our current user can't edit this post, bail
+    if( !current_user_can( 'edit_post' ) ) return;
+ 
+    $fields = [
+        'mtglt_result_file'
+    ];
+    foreach($fields as $field)
+    {
+        if( isset( $_POST[$field] ) )
+        {
+            update_post_meta( $post_id, $field, $_POST[$field] );
+        }
     }
-    // TODO: save option for date
-    // TODO: save option for location
-    // TODO: save option for format
 }
 add_action('save_post', 'mtglt_tournament_save_postdata');
 
-function mtglt_add_tournament_box()
-{
-    $screens = ['mtglt_tournament'];
-    foreach ($screens as $screen) {
-        add_meta_box(
-            'mtglt_tournament_box_id',           // Unique ID
-            'Tournament Settings',  // Box title
-            'mtglt_tournament_box_html',  // Content callback, must be of type callable
-            $screen                   // Post type
-        );
-    }
-}
-add_action('add_meta_boxes', 'mtglt_add_tournament_box');
+
 
 function mgtlt_league_shortcode( $atts = [] ) {
     $atts = array_change_key_case((array)$atts, CASE_LOWER);
