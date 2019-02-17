@@ -112,21 +112,20 @@ function mtglt_tournament_box_html($post)
     <select name="mtglt_league_field" id="mtglt_league_field" class="postbox">
         <option value="">Select a League...</option>
         <?php
-            while ($loop->have_posts()) {
-                $loop->the_post();
-                echo '<option value="' . get_the_ID() . '" ' . selected($meta_value, get_the_ID()) . '>';
-                the_title();
-                echo '</option>';
-            }
-            wp_reset_postdata();
-
-            // TODO: add option for date
-            // TODO: add option for location
-            // TODO: add option for format
-            // TODO: add result upload
+        while ($loop->have_posts()) {
+            $loop->the_post();
+            echo '<option value="' . get_the_ID() . '" ' . selected($meta_value, get_the_ID()) . '>';
+            the_title();
+            echo '</option>';
+        }
+        wp_reset_postdata();
         ?>
     </select>
     <?php
+    // TODO: add option for date
+    // TODO: add option for location
+    // TODO: add option for format
+    // TODO: add result upload
 }
 
 function mtglt_tournament_save_postdata($post_id)
@@ -138,6 +137,9 @@ function mtglt_tournament_save_postdata($post_id)
             $_POST['mtglt_league_field']
         );
     }
+    // TODO: save option for date
+    // TODO: save option for location
+    // TODO: save option for format
 }
 add_action('save_post', 'mtglt_tournament_save_postdata');
 
