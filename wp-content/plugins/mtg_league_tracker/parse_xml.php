@@ -6,11 +6,7 @@ class Player {
 }
 
 function parse_tournament($file) {
-	if(file_exists($file)) {
-		$xml = simplexml_load_file($file);
-	} else {
-		return false;
-	}
+	$xml = simplexml_load_file($file);
 	
 	if($xml === false) {
 		return false;
@@ -43,7 +39,7 @@ function parse_tournament($file) {
 			foreach ($participants as $player) {
 				if($player->getName() == "person") {
 					if(isset($players[(string)$player['id']]->rank)) {
-						$players[(string)$player['id']]->name = $player['last'].' '.$player['first'];
+						$players[(string)$player['id']]->name = utf8_encode($player['last']).' '.utf8_encode($player['first']);
 					}
 					
 				}
