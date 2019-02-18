@@ -27,9 +27,6 @@ Copyright 2019 Johannes Kühnel
 */
 
 /*
-TODO: create result table on install - see https://codex.wordpress.org/Creating_Tables_with_Plugins
-TODO: create player table on install - see https://codex.wordpress.org/Creating_Tables_with_Plugins
-TODO: add standings shortcode
 TODO: add delete button to meta box
 */
 
@@ -225,7 +222,7 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     $result = $wpdb->get_results($sql);
     $output = "";
     if (count($result) > 0) {
-        // output data of each row
+        // TODO: add table styling
         $output .= "<table>\n";
         $output .= "<tr><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
         foreach ($result as $key => $row) {
