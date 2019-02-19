@@ -135,6 +135,7 @@ function mtglt_tournament_save_postdata($post_id)
         
         $tournament_id = $post_id;
 
+        // TODO: move point settings to dedicated option page
         $point_schema = array(
             array(50, 35, 25, 25, 15, 15, 15, 15),
             array(60, 45, 30, 30, 20, 20, 20, 20),
@@ -230,9 +231,9 @@ function mgtlt_standings_shortcode( $atts = [] ) {
 
     $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, '$event_ids') GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
     $result = $wpdb->get_results($sql);
-    $output = "";
+    $output = "<div class='mtglt-standings'>";
     if (count($result) > 0) {
-        $output .= "<table class='mtglt-standings $format'>\n";
+        $output .= "<table class='mtglt-standings-table $format'>\n";
         $output .= "<tr><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
         foreach ($result as $key => $row) {
             $output .= "<tr><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
@@ -254,6 +255,7 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     } else {
         $output .= "Keine Turniere hinterlegt\n";
     }
+    $output .= "</div>";
 
     return $output;
 }
