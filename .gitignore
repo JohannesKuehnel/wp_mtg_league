@@ -1,5 +1,5 @@
 db_data/*
-wp-content/wp-uploads/*
+wp-content/uploads/*
 
 !db_data/.gitkeep
-!wp-content/wp-uploads/.gitkeep
+!wp-content/uploads/.gitkeep

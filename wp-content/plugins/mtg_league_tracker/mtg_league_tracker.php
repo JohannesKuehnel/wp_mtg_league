@@ -113,15 +113,9 @@ add_action('admin_enqueue_scripts', 'mtglt_add_admin_scripts');
 
 function mtglt_tournament_save_postdata($post_id)
 {
-    // Bail if we're doing an auto save
     if( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
- 
-    // if our nonce isn't there, or we can't verify it, bail
     if( !isset( $_POST['meta_box_nonce'] ) || !wp_verify_nonce( $_POST['meta_box_nonce'], 'mtglt_nonce' ) ) return;
- 
-    // if our current user can't edit this post, bail
-    //if( !current_user_can( 'edit_post' ) ) return;
- 
+
     if( isset( $_POST['mtglt_result_file'] ) )
     {
         update_post_meta( $post_id, 'mtglt_result_file', $_POST['mtglt_result_file'] );
@@ -130,10 +124,8 @@ function mtglt_tournament_save_postdata($post_id)
         $parsed = parse_url( $_POST['mtglt_result_file'] );
         $url    = '..' . dirname( $parsed [ 'path' ] ) . '/' . rawurlencode( basename( $parsed[ 'path' ] ) );
         $tournament = parse_tournament($url);
-        //if(!$tournament) return;
-        $date = date('Y-m-d', strtotime($tournament['date'])); // fetch from Event
-        $format = $tournament['format']; // fetch from Event Slug
-        $tournamentName = get_the_title( $post_id );
+        if(!$tournament) return; // TODO: add admin notice on fail
+
         $players = $tournament['players'];
 
         global $wpdb;
@@ -204,31 +196,61 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     $mtglt_atts = shortcode_atts(
         array(
             'season' => date("Y"),
-            'format' => 'both'
+            'format' => 'legacy',
+            'type' => 'open-series'
         ),
         $atts,
         'standings'
     );
 
     $season = $mtglt_atts['season'];
-    $format = $mtglt_atts['format'];
+    $format = strtolower($mtglt_atts['format']);
+    $type = strtolower($mtglt_atts['type']);
     
     global $wpdb;
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
     $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
+    $posts_table = $wpdb->prefix . 'posts';
     require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
-    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
+    $args = array(
+        'start_date' => date("Y-m-d H:i:s", mktime(0, 0, 0, 1, 1, $season)),
+        'end_date' => date("Y-m-d H:i:s", mktime(59, 59, 23, 31, 12, $season))
+    );
+    $events = tribe_get_events($args);
+    $events = array_filter( $events, function($event) use($format, $type) {
+        $categories = tribe_get_event_cat_slugs ( $event->ID );
+        $is_correct_type = in_array($type, $categories);
+        $is_correct_format = in_array($format, $categories);
+        return $is_correct_type && $is_correct_format;
+    });
+    $event_ids = implode(',', array_map(function($post){
+        return $post->ID;
+    }, $events));
+
+    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, '$event_ids') GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
     $result = $wpdb->get_results($sql);
     $output = "";
     if (count($result) > 0) {
-        // TODO: add table styling
-        $output .= "<table>\n";
+        $output .= "<table class='mtglt-standings $format'>\n";
         $output .= "<tr><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
         foreach ($result as $key => $row) {
             $output .= "<tr><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
         }
         $output .= "</table>\n";
+
+        // Display past events
+        $output .= "<h3 class='mtglt-standings-tournaments $format'>Ber&uuml;cksichtigte Turniere</h3>";
+        $output .= "<ul>";
+        foreach ($events as $key => $event) {
+            // Remove events without result files
+            $has_results = tribe_get_event_meta($event->ID, "mtglt_result_file");
+            if (!$has_results) {
+                continue;
+            }
+            $output .= "<li>" . date("d.m.Y", strtotime($event->EventStartDate)) . " " . $event->post_title . "</li>\n";
+        }
+        $output .= "</ul>";
     } else {
         $output .= "Keine Turniere hinterlegt\n";
     }
