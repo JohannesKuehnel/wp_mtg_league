@@ -69,12 +69,24 @@ function mtglt_install() {
 }
 register_activation_hook( __FILE__, 'mtglt_install' );
 
+// fix for upload limitation - https://codepen.io/chriscoyier/post/wordpress-4-7-1-svg-upload
+add_filter( 'wp_check_filetype_and_ext', function($data, $file, $filename, $mimes) {
+    $filetype = wp_check_filetype( $filename, $mimes );
+  
+    return [
+        'ext'             => $filetype['ext'],
+        'type'            => $filetype['type'],
+        'proper_filename' => $data['proper_filename']
+    ];
+  
+}, 10, 4 );
+
 // add .xml to the list of allowed file types
 function result_file_mime_types($mime_types) {
     $mime_types['xml'] = 'text/xml';
     return $mime_types;
 }
-add_filter('upload_mimes', 'result_file_mime_types', 1, 1);
+add_filter('upload_mimes', 'result_file_mime_types');
 
 function mtglt_add_result_box($post) {
     add_meta_box( 'mtglt-result-file' , __( 'Result File', 'textdomain' ), 'mtglt_file_callback', ['tribe_events'], 'side', 'low' );
@@ -183,6 +195,43 @@ function mtglt_options_page()
     );
 }
 add_action('admin_menu', 'mtglt_options_page');
+
+/*
+function add_top8_before_event($before) {
+    $before .= "<a class='mtglt-top8-link' href='#mtglt-top8'><h3>Zu den Top 8</h3></a>";
+    return $before;
+}
+add_filter('tribe_events_before_html', 'add_top8_before_event');
+*/
+function add_top8_after_event($after) {
+    $tournament = get_the_ID();
+
+    if( tribe_is_event_category() || tribe_is_events_home() ) return $after;
+
+    global $wpdb;
+    $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
+    $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
+    require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+
+    $sql = "SELECT $results_table_name.rank, $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC LIMIT 8";
+    $result = $wpdb->get_results($sql);
+    $after = "<div class='mtglt-top8'>";
+    $after .= "<h3><a id='mtglt-top8'></a>Top 8</h3>";
+    if (count($result) > 0) {
+        $after .= "<table class='mtglt-top8-table'>\n";
+        $after .= "<tr><th>Platz</th><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
+        foreach ($result as $key => $row) {
+            $after .= "<tr><td>" . $row->rank . "</td><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
+        }
+        $after .= "</table>\n";
+    } else {
+        $after .= "Keine Ergebnisse hinterlegt\n";
+    }
+    $after .= "</div>";
+
+    return $after;
+}
+add_filter('tribe_events_before_html', 'add_top8_after_event');
 
 function mgtlt_standings_shortcode( $atts = [] ) {
     $atts = array_change_key_case((array)$atts, CASE_LOWER);
