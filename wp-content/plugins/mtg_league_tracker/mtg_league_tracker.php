@@ -2,7 +2,7 @@
 /*
 Plugin Name: MTG League Tracker
 Description: A plugin to upload MTG tournament results from WER to keep track of league standings.
-Version: 0.1.1
+Version: 0.2
 Author: Johannes Kühnel
 Author URI: https://www.kuehnel.co.at/
 License: MIT
