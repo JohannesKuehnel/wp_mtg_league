@@ -223,7 +223,7 @@ function add_top8_before_event($before) {
 }
 add_filter('tribe_events_before_html', 'add_top8_before_event');
 */
-function add_top8_after_event($after) {
+function add_top8_to_event() {
     $tournament = get_the_ID();
 
     if( tribe_is_event_category() || tribe_is_events_home() ) return $after;
@@ -248,9 +248,9 @@ function add_top8_after_event($after) {
     }
     $after .= "</div>";
 
-    return $after;
+    echo $after;
 }
-add_filter('tribe_events_before_html', 'add_top8_after_event');
+add_filter('tribe_events_single_event_before_the_content', 'add_top8_to_event');
 
 function mgtlt_standings_shortcode( $atts = [] ) {
     $atts = array_change_key_case((array)$atts, CASE_LOWER);
