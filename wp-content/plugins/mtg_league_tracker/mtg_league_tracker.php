@@ -232,15 +232,15 @@ function add_top8_after_event($after) {
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
     $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
 
-    $sql = "SELECT $results_table_name.rank, $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC LIMIT 8";
+    $sql = "SELECT $results_table_name.rank, $players_table_name.name FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC LIMIT 8";
     $result = $wpdb->get_results($sql);
     $after = "<div class='mtglt-top8'>";
     $after .= "<h3><a id='mtglt-top8'></a>Top 8</h3>";
     if (count($result) > 0) {
         $after .= "<table class='mtglt-top8-table'>\n";
-        $after .= "<tr><th>Platz</th><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
+        $after .= "<tr><th>Platz</th><th>Name</th></tr>\n";
         foreach ($result as $key => $row) {
-            $after .= "<tr><td>" . $row->rank . "</td><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
+            $after .= "<tr><td>" . $row->rank . "</td><td>" . $row->name . "</td></tr>\n";
         }
         $after .= "</table>\n";
     } else {
@@ -308,7 +308,8 @@ function mgtlt_standings_shortcode( $atts = [] ) {
             if (!$has_results) {
                 continue;
             }
-            $output .= "<li>" . date("d.m.Y", strtotime($event->EventStartDate)) . " " . $event->post_title . "</li>\n";
+            $event_url = tribe_get_event_link($event->ID, false);
+            $output .= "<li><a class='mtglt-event-link' href='" . $event_url . "'>" . date("d.m.Y", strtotime($event->EventStartDate)) . " " . $event->post_title . "</a></li>\n";
         }
         $output .= "</ul>";
     } else {
