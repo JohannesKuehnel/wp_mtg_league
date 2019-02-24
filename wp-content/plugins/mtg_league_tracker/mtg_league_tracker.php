@@ -146,21 +146,34 @@ function mtglt_tournament_save_postdata($post_id)
         );
         $schema_index = count($players) <= 16 ? 0 : (count($players) <= 32 ? 1 : 2);
 
+        $has_results = $wpdb->get_var( "SELECT COUNT(*) FROM $results_table_name WHERE $results_table_name.tournament_id = $tournament_id" );
+        if( $has_results ) {
+            // TODO: add admin notice or confirmation prompt
+            $wpdb->delete( $results_table_name, array(
+                'tournament_id' => $tournament_id
+            ), '%d' );
+        }
+
         foreach ($players as $player) {
             $player->points = $player->rank <= 8 ? $point_schema[$schema_index][$player->rank - 1] : 5;
-            $wpdb->replace($players_table_name, array(
+            $wpdb->replace( $players_table_name, array(
                 'dci' => $player->dci,
                 'name' => utf8_decode($player->name)
             ), array(
-                '%d',
+                '%s',
                 '%s'
-            ));
-            $wpdb->insert($results_table_name, array(
+            ) );
+            $wpdb->insert( $results_table_name, array(
                 'player_dci' => $player->dci,
                 'tournament_id' => $tournament_id,
                 'rank' => $player->rank,
                 'points' => $player->points
-            ), '%d');
+            ), array(
+                '%s',
+                '%d',
+                '%d',
+                '%d'
+            ) );
         }
     }
 }
@@ -218,7 +231,6 @@ function add_top8_after_event($after) {
     global $wpdb;
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
     $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
-    require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
     $sql = "SELECT $results_table_name.rank, $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC LIMIT 8";
     $result = $wpdb->get_results($sql);
@@ -260,7 +272,6 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
     $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
     $posts_table = $wpdb->prefix . 'posts';
-    require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
     $args = array(
         'start_date' => date("Y-m-d H:i:s", mktime(0, 0, 0, 1, 1, $season)),
