@@ -18,9 +18,20 @@ Don't forget to install [The Events Calendar](https://wordpress.org/plugins/the-
 
 If your Wordpress installation in Docker doesn't let you install plugins, make sure to set the correct permissions.
 ```
-docker-compose exec -T wordpress sh
+docker-compose exec -T wordpress bash
+```
+or
+```
+docker exec -it wp_mtg_league_wordpress_1 bash
+```
+
+and then
+```
 chown -cR www-data:www-data /var/www/html/wp-content
 ```
+
+## Debugging with XDebug
+TODO
 
 ## Authors
 * **Johannes Kühnel** - https://github.com/JohannesKuehnel

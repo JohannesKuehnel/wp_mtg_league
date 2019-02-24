@@ -135,7 +135,6 @@ function mtglt_tournament_save_postdata($post_id)
         global $wpdb;
         $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
         $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
-        require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         
         $tournament_id = $post_id;
 
@@ -148,12 +147,20 @@ function mtglt_tournament_save_postdata($post_id)
         $schema_index = count($players) <= 16 ? 0 : (count($players) <= 32 ? 1 : 2);
 
         foreach ($players as $player) {
-            // TODO: change to $wpdb->insert()
             $player->points = $player->rank <= 8 ? $point_schema[$schema_index][$player->rank - 1] : 5;
-            $sql = "INSERT INTO $players_table_name (dci, name) VALUES (" . $player->dci . ", '" . utf8_decode($player->name) . "')";
-            dbDelta($sql);
-            $sql = "INSERT INTO $results_table_name (player_dci, tournament_id, rank, points) VALUES (" . $player->dci . ", " . $tournament_id . ", " . $player->rank . ", " . $player->points . ")";
-            dbDelta($sql);
+            $wpdb->replace($players_table_name, array(
+                'dci' => $player->dci,
+                'name' => utf8_decode($player->name)
+            ), array(
+                '%d',
+                '%s'
+            ));
+            $wpdb->insert($results_table_name, array(
+                'player_dci' => $player->dci,
+                'tournament_id' => $tournament_id,
+                'rank' => $player->rank,
+                'points' => $player->points
+            ), '%d');
         }
     }
 }

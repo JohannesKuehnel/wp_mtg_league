@@ -12,6 +12,7 @@ services:
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_DB_PASSWORD: password
       WORDPRESS_DEBUG: enabled
+      XDEBUG_CONFIG: remote_host=10.0.0.17
     volumes:
       - ./wp-content/plugins/mtg_league_tracker:/var/www/html/wp-content/plugins/mtg_league_tracker:rw
       - ./wp-content/uploads:/var/www/html/wp-content/uploads
