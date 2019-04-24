@@ -232,19 +232,17 @@ function add_top8_to_event() {
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
     $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
 
-    $sql = "SELECT $results_table_name.rank, $players_table_name.name FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC LIMIT 8";
+    $sql = "SELECT $results_table_name.rank, $players_table_name.name FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $tournament GROUP BY $players_table_name.name ORDER BY $results_table_name.rank ASC";
     $result = $wpdb->get_results($sql);
     $after = "<div class='mtglt-top8'>";
-    $after .= "<h3><a id='mtglt-top8'></a>Top 8</h3>";
     if (count($result) > 0) {
+        $after .= "<h3><a id='mtglt-top8'></a>Top 8 (".count($result)." Spieler)</h3>";
         $after .= "<table class='mtglt-top8-table'>\n";
         $after .= "<tr><th>Platz</th><th>Name</th></tr>\n";
-        foreach ($result as $key => $row) {
-            $after .= "<tr><td>" . $row->rank . "</td><td>" . $row->name . "</td></tr>\n";
+        for ($i = 0; $i < 8; $i++) {
+            $after .= "<tr><td>" . $result[$i]->rank . "</td><td>" . $result[$i]->name . "</td></tr>\n";
         }
         $after .= "</table>\n";
-    } else {
-        $after .= "Keine Ergebnisse hinterlegt\n";
     }
     $after .= "</div>";
 
@@ -308,8 +306,10 @@ function mgtlt_standings_shortcode( $atts = [] ) {
             if (!$has_results) {
                 continue;
             }
+            $sql = "SELECT $players_table_name.name as players FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $event->ID GROUP BY $players_table_name.name";
+            $result = $wpdb->get_results($sql);
             $event_url = tribe_get_event_link($event->ID, false);
-            $output .= "<li><a class='mtglt-event-link' href='" . $event_url . "'>" . date("d.m.Y", strtotime($event->EventStartDate)) . " " . $event->post_title . "</a></li>\n";
+            $output .= "<li><a class='mtglt-event-link' href='" . $event_url . "'>" . date("d.m.Y", strtotime($event->event_date)) . " " . $event->post_title . "</a> (".count($result)." Spieler)</li>\n";
         }
         $output .= "</ul>";
     } else {
