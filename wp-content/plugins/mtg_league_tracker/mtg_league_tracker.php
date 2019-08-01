@@ -273,7 +273,8 @@ function mgtlt_standings_shortcode( $atts = [] ) {
 
     $args = array(
         'start_date' => date("Y-m-d H:i:s", mktime(0, 0, 0, 1, 1, $season)),
-        'end_date' => date("Y-m-d H:i:s", mktime(59, 59, 23, 31, 12, $season))
+        'end_date' => date("Y-m-d H:i:s", mktime(23, 59, 59, 12, 31, $season)),
+        'posts_per_page' => -1
     );
     $events = tribe_get_events($args);
     $events = array_filter( $events, function($event) use($format, $type) {
