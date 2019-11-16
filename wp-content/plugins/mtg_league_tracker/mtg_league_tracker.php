@@ -29,6 +29,7 @@ if ( !function_exists( 'add_action' ) ) {
 
 defined('MTGLT_PLAYERS_TABLE_NAME') or define('MTGLT_PLAYERS_TABLE_NAME', 'mtglt_players');
 defined('MTGLT_RESULTS_TABLE_NAME') or define('MTGLT_RESULTS_TABLE_NAME', 'mtglt_results');
+defined('MTGLT_QUALIFIED_THRESHOLD') or define('MTGLT_QUALIFIED_THRESHOLD', '40');
 
 function mtglt_plugin_activate(){
     if ( ! is_plugin_active( 'the-events-calendar/the-events-calendar.php' ) and current_user_can( 'activate_plugins' ) ) {
@@ -256,7 +257,8 @@ function mgtlt_standings_shortcode( $atts = [] ) {
         array(
             'season' => date("Y"),
             'format' => 'legacy',
-            'type' => 'open-series'
+            'type' => 'open-series', // TODO: use option for qualifier category
+            'threshold' => MTGLT_QUALIFIED_THRESHOLD // TODO: use option for threshold
         ),
         $atts,
         'standings'
@@ -265,6 +267,7 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     $season = $mtglt_atts['season'];
     $format = strtolower($mtglt_atts['format']);
     $type = strtolower($mtglt_atts['type']);
+    $threshold = $mtglt_atts['threshold'];
     
     global $wpdb;
     $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
@@ -287,14 +290,14 @@ function mgtlt_standings_shortcode( $atts = [] ) {
         return $post->ID;
     }, $events));
 
-    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, '$event_ids') GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
-    $result = $wpdb->get_results($sql);
+    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, %s) GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
+    $result = $wpdb->get_results( $wpdb->prepare($sql, $event_ids ) );
     $output = "<div class='mtglt-standings'>";
     if (count($result) > 0) {
         $output .= "<table class='mtglt-standings-table $format'>\n";
         $output .= "<tr><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
         foreach ($result as $key => $row) {
-            $output .= "<tr><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
+            $output .= "<tr" . ($row->points >= $threshold ? " class='qualified'" : "") . "><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
         }
         $output .= "</table>\n";
 
@@ -307,8 +310,8 @@ function mgtlt_standings_shortcode( $atts = [] ) {
             if (!$has_results) {
                 continue;
             }
-            $sql = "SELECT $players_table_name.name as players FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = $event->ID GROUP BY $players_table_name.name";
-            $result = $wpdb->get_results($sql);
+            $sql = "SELECT $players_table_name.name as players FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND $results_table_name.tournament_id = %s GROUP BY $players_table_name.name";
+            $result = $wpdb->get_col( $wpdb->prepare($sql, $event->ID) );
             $event_url = tribe_get_event_link($event->ID, false);
             $output .= "<li><a class='mtglt-event-link' href='" . $event_url . "'>" . date("d.m.Y", strtotime($event->event_date)) . " " . $event->post_title . "</a> (".count($result)." Spieler)</li>\n";
         }
@@ -321,8 +324,66 @@ function mgtlt_standings_shortcode( $atts = [] ) {
     return $output;
 }
 
+function mtglt_get_qualified_players($season, $format, $point_threshold) {
+    global $wpdb;
+    $players_table_name = $wpdb->prefix . MTGLT_PLAYERS_TABLE_NAME;
+    $results_table_name = $wpdb->prefix . MTGLT_RESULTS_TABLE_NAME;
+    $posts_table = $wpdb->prefix . 'posts';
+    $type = 'open-series'; // TODO: use option for qualifier category
+
+    $args = array(
+        'start_date' => date("Y-m-d H:i:s", mktime(0, 0, 0, 1, 1, $season)),
+        'end_date' => date("Y-m-d H:i:s", mktime(23, 59, 59, 12, 31, $season)),
+        'posts_per_page' => -1
+    );
+    $events = tribe_get_events($args);
+    $events = array_filter( $events, function($event) use($format, $type) {
+        $categories = tribe_get_event_cat_slugs ( $event->ID );
+        $is_correct_type = in_array($type, $categories);
+        $is_correct_format = in_array($format, $categories);
+        return $is_correct_type && $is_correct_format;
+    });
+    $event_ids = implode(',', array_map(function($post){
+        return $post->ID;
+    }, $events));
+
+    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, %s) GROUP BY $players_table_name.name HAVING points >= $point_threshold ORDER BY points DESC, name ASC";
+    return $wpdb->get_results( $wpdb->prepare($sql, $event_ids ) );
+}
+
+function mtglt_qualified_players_shortcode( $atts = [] ) {
+    $atts = array_change_key_case((array)$atts, CASE_LOWER);
+    $mtglt_atts = shortcode_atts(
+        array(
+            'season' => date("Y"),
+            'format' => 'legacy',
+            'threshold' => MTGLT_QUALIFIED_THRESHOLD // TODO: use option for threshold
+        ),
+        $atts,
+        'qualified'
+    );
+
+    $season = $mtglt_atts['season'];
+    $format = strtolower($mtglt_atts['format']);
+    $threshold = $mtglt_atts['threshold'];
+
+    $qualified_players = mtglt_get_qualified_players($season, $format, $threshold);
+
+    if (count($qualified_players) > 0) {
+        $output = "<div class='mtglt-standings'>";
+        $output .= "<ol class='mtglt-standings-table $format'>\n";
+        foreach ($qualified_players as $key => $row) {
+            $output .= "<li>" . $row->name . ' - ' . $row->points . " Punkte</li>\n";
+        }
+        $output .= "</ol>\n";
+        $output .= "</div>";
+    }
+    return $output;
+}
+
 function mgtlt_shortcode_init() {
     add_shortcode( 'standings', 'mgtlt_standings_shortcode' );
+    add_shortcode(  'qualified', 'mtglt_qualified_players_shortcode' );
 }
 add_action('init', 'mgtlt_shortcode_init');
 
