@@ -29,7 +29,7 @@ if ( !function_exists( 'add_action' ) ) {
 
 defined('MTGLT_PLAYERS_TABLE_NAME') or define('MTGLT_PLAYERS_TABLE_NAME', 'mtglt_players');
 defined('MTGLT_RESULTS_TABLE_NAME') or define('MTGLT_RESULTS_TABLE_NAME', 'mtglt_results');
-defined('MTGLT_QUALIFIED_THRESHOLD') or define('MTGLT_QUALIFIED_THRESHOLD', '40');
+defined('MTGLT_QUALIFIED_THRESHOLD') or define('MTGLT_QUALIFIED_THRESHOLD', '32');
 
 function mtglt_plugin_activate(){
     if ( ! is_plugin_active( 'the-events-calendar/the-events-calendar.php' ) and current_user_can( 'activate_plugins' ) ) {
@@ -139,14 +139,6 @@ function mtglt_tournament_save_postdata($post_id)
         
         $tournament_id = $post_id;
 
-        // TODO: move point settings to dedicated option page
-        $point_schema = array(
-            array(50, 35, 25, 25, 15, 15, 15, 15),
-            array(60, 45, 30, 30, 20, 20, 20, 20),
-            array(70, 55, 35, 35, 25, 25, 25, 25),
-        );
-        $schema_index = count($players) <= 16 ? 0 : (count($players) <= 32 ? 1 : 2);
-
         $has_results = $wpdb->get_var( "SELECT COUNT(*) FROM $results_table_name WHERE $results_table_name.tournament_id = $tournament_id" );
         if( $has_results ) {
             // TODO: add admin notice or confirmation prompt
@@ -156,7 +148,6 @@ function mtglt_tournament_save_postdata($post_id)
         }
 
         foreach ($players as $player) {
-            $player->points = $player->rank <= 8 ? $point_schema[$schema_index][$player->rank - 1] : 5;
             $wpdb->replace( $players_table_name, array(
                 'dci' => $player->dci,
                 'name' => utf8_decode($player->name)
@@ -251,7 +242,56 @@ function add_top8_to_event() {
 }
 add_filter('tribe_events_single_event_before_the_content', 'add_top8_to_event');
 
-function mgtlt_standings_shortcode( $atts = [] ) {
+function mtglt_map_players($placements) {
+    $bestRank = 9999;
+    $worstRank = 0;
+    $totalPoints = 0;
+    $countedResults = array(0, 0, 0, 0, 0, 0);
+    foreach ($placements as $result) {
+        $totalPoints += $result->points;
+        $minimumPoints = min($countedResults);
+        if ($result->points > $minimumPoints) {
+            $countedResults[array_search($minimumPoints, $countedResults)] = $result->points;
+        }
+        if ((int)$result->rank < $bestRank) {
+            $bestRank = (int)$result->rank;
+        }
+        if ((int)$result->rank > $worstRank) {
+            $worstRank = (int)$result->rank;
+        }
+    }
+    $averagePoints = $totalPoints / count($placements);
+    return array(
+        'name' => $placements[0]->name,
+        'dci' => $placements[0]->dci,
+        'points' => array_sum($countedResults),
+        'averagePoints' => $averagePoints,
+        'totalPoints' => $totalPoints,
+        'bestRank' => $bestRank,
+        'worstRank' => $worstRank
+    );
+}
+
+function mtglt_sort_players($a, $b) {
+    if ($a['points'] === $b['points']) {
+        if ($a['averagePoints'] === $b['averagePoints']) {
+            if ($a['totalPoints'] === $b['totalPoints']) {
+                if ($a['bestRank'] === $b['bestRank']) {
+                    if ($a['worstRank'] === $b['worstRank']) {
+                        return 0;
+                    }
+                    return $a['worstRank'] > $b['worstRank'] ? 1 : -1;
+                }
+                return $a['bestRank'] > $b['bestRank'] ? 1 : -1;
+            }
+            return $a['totalPoints'] > $b['totalPoints'] ? -1 : 1;
+        }
+        return $a['averagePoints'] > $b['averagePoints'] ? -1 : 1;
+    }
+    return $a['points'] > $b['points'] ? -1 : 1;
+}
+
+function mtglt_standings_shortcode( $atts = [] ) {
     $atts = array_change_key_case((array)$atts, CASE_LOWER);
     $mtglt_atts = shortcode_atts(
         array(
@@ -290,14 +330,26 @@ function mgtlt_standings_shortcode( $atts = [] ) {
         return $post->ID;
     }, $events));
 
-    $sql = "SELECT $players_table_name.name, $players_table_name.dci, SUM($results_table_name.points) as points FROM $players_table_name, $results_table_name WHERE $players_table_name.dci = $results_table_name.player_dci AND FIND_IN_SET($results_table_name.tournament_id, %s) GROUP BY $players_table_name.name ORDER BY points DESC, name ASC";
-    $result = $wpdb->get_results( $wpdb->prepare($sql, $event_ids ) );
+    $sql = "SELECT $players_table_name.name, $players_table_name.dci, $results_table_name.points, $results_table_name.rank, $results_table_name.points FROM $players_table_name JOIN $results_table_name ON $players_table_name.dci = $results_table_name.player_dci WHERE FIND_IN_SET($results_table_name.tournament_id, %s) GROUP BY $players_table_name.name ORDER BY $players_table_name.name ASC";
+    $results = $wpdb->get_results( $wpdb->prepare($sql, $event_ids ) );
+    $players = array();
+    foreach ($results as $key => $row) {
+        if (!isset($players[$row->name])) {
+            $players[$row->name] = array();
+        }
+        $players[$row->name][] = $row;
+    }
+    $players = array_map("mtglt_map_players", $players);
+    usort($players, "mtglt_sort_players");
+
     $output = "<div class='mtglt-standings'>";
-    if (count($result) > 0) {
+    if (count($players) > 0) {
         $output .= "<table class='mtglt-standings-table $format'>\n";
         $output .= "<tr><th>Name</th><th>DCI #</th><th>Points</th></tr>\n";
-        foreach ($result as $key => $row) {
-            $output .= "<tr" . ($row->points >= $threshold ? " class='qualified'" : "") . "><td>" . $row->name . "</td><td>" . $row->dci . "</td><td>" . $row->points . "</td></tr>\n";
+        $counter = 0;
+        foreach ($players as $key => $row) {
+            $output .= "<tr" . ($counter < $threshold ? " class='qualified'" : "") . "><td>" . $row['name'] . "</td><td>" . $row['dci'] . "</td><td>" . $row['points'] . "</td></tr>\n";
+            $counter++;
         }
         $output .= "</table>\n";
 
@@ -382,7 +434,7 @@ function mtglt_qualified_players_shortcode( $atts = [] ) {
 }
 
 function mgtlt_shortcode_init() {
-    add_shortcode( 'standings', 'mgtlt_standings_shortcode' );
+    add_shortcode( 'standings', 'mtglt_standings_shortcode' );
     add_shortcode(  'qualified', 'mtglt_qualified_players_shortcode' );
 }
 add_action('init', 'mgtlt_shortcode_init');
