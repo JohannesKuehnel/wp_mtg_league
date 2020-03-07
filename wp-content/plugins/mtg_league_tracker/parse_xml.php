@@ -14,6 +14,7 @@ function parse_tournament($file) {
   }
 
   $players = array();
+  $disqualifiedPlayers = array();
 
   if(count($xml->event) > 0) {
     // XML format with rounds
@@ -33,7 +34,10 @@ function parse_tournament($file) {
           $tmp->rank = (int)$player['seq'];
           $players[$tmp->dci] = $tmp;
         }
-        break;
+      } elseif ($element->getName() == "role" && $element['cd'] == "PL" && $element['type'] == "DQ") {
+        foreach ($element->children() as $player) {
+          $disqualifiedPlayers[] = (string)$player['person'];
+        }
       }
     }
 
@@ -53,11 +57,13 @@ function parse_tournament($file) {
       foreach ($rounds as $round) {
         $roundMatches = $round->children();
         foreach ($roundMatches as $key => $match) {
+          $playerOne = (string)$match['person'];
+          $playerTwo = (string)$match['opponent'];
           if((int)$match['outcome'] === 1) {
-            $players[(string)$match['person']]->points += 3;
+            if (!in_array($playerOne, $disqualifiedPlayers)) $players[$playerOne]->points += 3;
           } else if ((int)$match['outcome'] === 2) {
-            $players[(string)$match['person']]->points += 1;
-            $players[(string)$match['opponent']]->points += 1;
+            if (!in_array($playerOne, $disqualifiedPlayers)) $players[$playerOne]->points += 1;
+            if (!in_array($playerTwo, $disqualifiedPlayers)) $players[$playerTwo]->points += 1;
           }
         }
       }
