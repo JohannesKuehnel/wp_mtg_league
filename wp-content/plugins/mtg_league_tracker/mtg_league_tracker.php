@@ -330,7 +330,7 @@ function mtglt_standings_shortcode( $atts = [] ) {
         return $post->ID;
     }, $events));
 
-    $sql = "SELECT $players_table_name.name, $players_table_name.dci, $results_table_name.points, $results_table_name.rank, $results_table_name.points FROM $players_table_name JOIN $results_table_name ON $players_table_name.dci = $results_table_name.player_dci WHERE FIND_IN_SET($results_table_name.tournament_id, %s) GROUP BY $players_table_name.name ORDER BY $players_table_name.name ASC";
+    $sql = "SELECT $players_table_name.name, $players_table_name.dci, $results_table_name.points, $results_table_name.rank, $results_table_name.points FROM $players_table_name JOIN $results_table_name ON $players_table_name.dci = $results_table_name.player_dci WHERE FIND_IN_SET($results_table_name.tournament_id, %s) ORDER BY $players_table_name.name ASC";
     $results = $wpdb->get_results( $wpdb->prepare($sql, $event_ids ) );
     $players = array();
     foreach ($results as $key => $row) {
